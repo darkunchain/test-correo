@@ -12,9 +12,10 @@
               <b-button @click="enviar_(operation)" variant="primary">Enviar</b-button>
             </b-col>
             <b-col cols="4">
-              <div v-if="statuses[operation]" class="check-message">
+              <div v-if="statuses[operation]" :class="['check-message', { 'error-message': !statuses[operation].success }]">
                 <span v-if="statuses[operation].success" class="checkmark">✔</span>
-                <span v-if="statuses[operation].success" class="message">Proceso {{ operation }} finalizado correctamente</span>
+                  <span v-else class="errormark">✘</span>
+                  <span class="message">{{ statuses[operation].message }}</span>                   
               </div>
             </b-col>
           </b-row>
@@ -42,7 +43,9 @@ export default {
         'gmail-OnPremise','gmail-Office365',
         'Hotmail-OnPremise','Hotmail-Office365'
       ],
-      statuses: {}
+      statuses: {},
+      tokenStatuses: {},
+      timers: {}
     }
   },
   methods: {
@@ -50,9 +53,34 @@ export default {
       try {
         const response = await axios.post(`http://localhost:5000/${operation}`);
         this.$set(this.statuses, operation, response.data);
+
+        // Borrar la notificación de envío correcto después de 10 segundos
+        if (response.data.success) {
+          this.timers[operation] = setTimeout(() => {
+            this.$delete(this.statuses, operation);
+            
+            // Mostrar la notificación de estado del token si existe
+            if (response.data.token_status) {
+              this.$set(this.tokenStatuses, operation, response.data.token_status);
+
+              // Borrar la notificación de estado del token después de 10 segundos
+              setTimeout(() => {
+                this.$delete(this.tokenStatuses, operation);
+              }, 10000);
+            }
+          }, 10000);
+        }
+
       } catch (error) {
         console.error(`Error al procesar la operación ${operation}:`, error);
+        this.$set(this.statuses, operation, { success: false, message: 'Error al enviar el correo' });
       }
+    }
+  },
+  beforeDestroy() {
+    // Limpiar los temporizadores para evitar fugas de memoria
+    for (let operation in this.timers) {
+      clearTimeout(this.timers[operation]);
     }
   }
 }
@@ -71,6 +99,7 @@ export default {
 .check-message {
   display: flex;
   align-items: center;
+  color: green;  
 }
 
 .checkmark {
@@ -79,8 +108,18 @@ export default {
   margin-right: 5px;
 }
 
-.message {
-  font-size: 14px;
-  color: green;
-}
+
+.errormark {
+    color: red;
+    font-size: 20px;
+    margin-right: 5px;
+  }
+  
+  .message {
+    font-size: 14px;
+  }
+  
+  .error-message .message {
+    color: red; /* Cambia el color del mensaje de error a rojo */
+  }
 </style>
